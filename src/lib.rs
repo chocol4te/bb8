@@ -295,7 +295,7 @@ impl<M: ManageConnection> Builder<M> {
         self,
         manager: M,
         event_loop: Remote,
-    ) -> Box<Future<Item = Pool<M>, Error = M::Error>> {
+    ) -> Box<Future<Item = Pool<M>, Error = M::Error> + Send> {
         let (p, f) = self.build_inner(manager, event_loop);
         Box::new(f.map(|_| p))
     }
