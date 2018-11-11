@@ -34,12 +34,13 @@ impl RedisPool {
     }
 
     /// Run the function with a connection provided by the pool.
-    pub fn run<'a, T, E, U, F>(&self, f: F) -> Box<Future<Item = T, Error = E> + 'a>
+    pub fn run<'a, T, E, U, F>(&self, f: F) -> Box<Future<Item = T, Error = E> + Send + 'a>
     where
-        F: FnOnce(Connection) -> U + 'a,
+        F: FnOnce(Connection) -> U + Send + 'a,
         U: IntoFuture<Item = (Connection, T), Error = E> + 'a,
-        E: From<RedisError> + 'a,
-        T: 'a,
+        U::Future: Send + 'a,
+        E: From<RedisError> + Send + 'a,
+        T: Send + 'a,
     {
         let f = move |conn: Option<Connection>| {
             let conn = conn.unwrap();
@@ -79,7 +80,7 @@ impl bb8::ManageConnection for RedisConnectionManager {
     fn is_valid(
         &self,
         conn: Self::Connection,
-    ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)>> {
+    ) -> Box<Future<Item = Self::Connection, Error = (Self::Error, Self::Connection)> + Send> {
         // The connection should only be None after a failure.
         Box::new(
             redis::cmd("PING")
