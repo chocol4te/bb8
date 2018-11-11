@@ -34,7 +34,7 @@ impl RedisPool {
     }
 
     /// Run the function with a connection provided by the pool.
-    pub fn run_nice<'a, T, E, U, F>(&self, f: F) -> Box<Future<Item = T, Error = E> + 'a>
+    pub fn run<'a, T, E, U, F>(&self, f: F) -> Box<Future<Item = T, Error = E> + 'a>
     where
         F: FnOnce(Connection) -> U + 'a,
         U: IntoFuture<Item = (Connection, T), Error = E> + 'a,
