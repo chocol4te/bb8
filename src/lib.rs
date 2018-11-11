@@ -752,8 +752,8 @@ impl<M: ManageConnection> Pool<M> {
     ///
     /// The closure will be executed on the tokio event loop provided during
     /// the construction of this pool, so it must be `Send`. The closure's return
-    /// value need not be `Send` as it will live only on the tokio event loop.
-    /// The return value of this function must be polled on the calling thread.
+    /// value is also `Send` so that the Future can be consumed in contexts where
+    /// `Send` is needed.
     pub fn run<'a, T, E, U, F>(&self, f: F) -> Box<Future<Item = T, Error = E> + Send + 'a>
     where
         F: FnOnce(M::Connection) -> U + Send + 'a,
