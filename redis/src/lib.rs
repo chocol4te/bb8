@@ -7,30 +7,67 @@ pub extern crate redis;
 extern crate futures;
 extern crate tokio_core;
 
-use futures::Future;
+use futures::{Future, IntoFuture};
 use tokio_core::reactor::Handle;
+
+use redis::async::Connection;
+use redis::{Client, RedisError};
 
 use std::io;
 use std::option::Option;
 
-type Result<T> = std::result::Result<T, redis::RedisError>;
+type Result<T> = std::result::Result<T, RedisError>;
+
+/// `RedisPool` is a convenience wrapper around `bb8::Pool` that hides the fact that
+/// `RedisConnectionManager` uses an `Option<Connection>` to smooth over the API incompatibility.
+#[derive(Debug)]
+pub struct RedisPool {
+    // The `bb8::Builder` that manages the pool.
+    pool: bb8::Pool<RedisConnectionManager>,
+}
+
+impl RedisPool {
+    /// Constructs a new `RedisPool`, see the `bb8::Builder` documentation for description of
+    /// parameters.
+    pub fn new(pool: bb8::Pool<RedisConnectionManager>) -> RedisPool {
+        RedisPool { pool }
+    }
+
+    /// Run the function with a connection provided by the pool.
+    pub fn run_nice<'a, T, E, U, F>(&self, f: F) -> Box<Future<Item = T, Error = E> + 'a>
+    where
+        F: FnOnce(Connection) -> U + 'a,
+        U: IntoFuture<Item = (Connection, T), Error = E> + 'a,
+        E: From<RedisError> + 'a,
+        T: 'a,
+    {
+        let f = move |conn: Option<Connection>| {
+            let conn = conn.unwrap();
+            f(conn)
+                .into_future()
+                .map(|(conn, item)| (item, Some(conn)))
+                .map_err(|err| (err, None))
+        };
+        self.pool.run(f)
+    }
+}
 
 /// A `bb8::ManageConnection` for `redis::async::Connection`s.
 #[derive(Clone, Debug)]
 pub struct RedisConnectionManager {
-    client: redis::Client,
+    client: Client,
 }
 
 impl RedisConnectionManager {
     /// Create a new `PostgresConnectionManager`.
-    pub fn new(client: redis::Client) -> Result<RedisConnectionManager> {
+    pub fn new(client: Client) -> Result<RedisConnectionManager> {
         Ok(RedisConnectionManager { client })
     }
 }
 
 impl bb8::ManageConnection for RedisConnectionManager {
-    type Connection = Option<redis::async::Connection>;
-    type Error = redis::RedisError;
+    type Connection = Option<Connection>;
+    type Error = RedisError;
 
     fn connect(
         &self,
